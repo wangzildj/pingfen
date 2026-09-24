@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>评委系统控制台</title>
+<meta name="theme-color" content="#0f1226">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="app">评委系统控制台</h1>
+
+    <div class="card-box">
+      <div><span id="dot" class="status-dot off"></span><span id="status">连接中…</span></div>
+    </div>
+
+    <div class="card-box">
+      <label>选手选择（大屏展示 / 评委打分对象）</label>
+      <select id="ctSel"><option value="">暂无选手</option></select>
+      <div class="kv" style="margin-top:12px">
+        <span>当前选手：<b id="curName">-</b></span>
+        <span>评分状态：<b id="scState">-</b></span>
+        <span>已收分数：<b id="scCount">0</b></span>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn ok" id="startBtn">开始评分</button>
+        <button class="btn danger" id="endBtn">结束评分</button>
+        <button class="btn" id="resetBtn">重置</button>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <label>大屏页面切换</label>
+      <div class="ctrl-grid" style="margin-top:8px">
+        <button class="ctrl-btn" data-page="contestant">显示选手资料</button>
+        <button class="ctrl-btn" data-page="scoring">打分展示页</button>
+        <button class="ctrl-btn" data-page="leaderboard">排行榜</button>
+        <button class="ctrl-btn" data-page="background">恢复大屏幕</button>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <label>评委打分进度（当前选手）</label>
+      <div id="judgeProgress" class="jprogress"><span class="muted">暂无</span></div>
+    </div>
+  </div>
+
+  <script src="/js/ws.js"></script>
+  <script>
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const $ = (id) => document.getElementById(id);
+    let state = null;
+
+    function currentContestant() {
+      return state ? state.contestants.find(c => c.id === state.currentContestantId) : null;
+    }
+
+    function render() {
+      if (!state) return;
+      // 选手下拉
+      const sel = $('ctSel');
+      const prev = sel.value;
+      sel.innerHTML = state.contestants.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')
+        || '<option value="">暂无选手</option>';
+      if (state.currentContestantId && state.contestants.find(c => c.id === state.currentContestantId)) {
+        sel.value = state.currentContestantId;
+      } else if (prev) sel.value = prev;
+
+      const cur = currentContestant();
+      $('curName').textContent = cur ? cur.name : '-';
+      const smap = { idle: '未开始', active: '进行中', ended: '已结束' };
+      $('scState').textContent = smap[state.scoring] || state.scoring;
+      // 仅统计计入的评分：未启用大众评分时排除大众评委
+      const raw = cur ? (state.scores[cur.id] || []) : [];
+      const list = raw.filter(s => state.massEnabled || s.judgeType !== 'mass');
+      $('scCount').textContent = list.length;
+
+      document.querySelectorAll('.ctrl-btn').forEach(b =>
+        b.classList.toggle('active', b.getAttribute('data-page') === state.page));
+
+      // 评委打分进度：列出当前选手的全部评委（未启用大众评分时排除大众评委），逐位标注已/未打分
+      const judges = (state.judges || []).filter(j => state.massEnabled || (j.role !== 'mass'));
+      const scoredMap = {};
+      list.forEach(s => { scoredMap[s.judgeId] = s; });
+      const jp = $('judgeProgress');
+      if (!cur) {
+        jp.innerHTML = '<span class="muted">请先在上方选择当前选手</span>';
+      } else if (!judges.length) {
+        jp.innerHTML = '<span class="muted">暂无评委，请在后台添加</span>';
+      } else {
+        jp.innerHTML = judges.map(j => {
+          const s = scoredMap[j.id];
+          const done = !!s;
+          return `<div class="jp-item ${done ? 'done' : 'todo'}">
+            ${j.avatar ? `<img src="${esc(j.avatar)}" alt="">` : `<div class="ph">${esc((j.name || '?').slice(0, 1))}</div>`}
+            <div class="jp-info"><div class="jp-name">${esc(j.name)}</div><div class="jp-tag">${j.role === 'mass' ? '大众评委' : '专业评委'}</div></div>
+            <div class="jp-status">${done ? `<span class="badge ok">✓ 已打分 ${Number(s.score).toFixed(2)}</span>` : `<span class="badge no">未打分</span>`}</div>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    $('ctSel').addEventListener('change', () => sendWS({ type: 'setCurrent', id: $('ctSel').value || null }));
+    document.querySelectorAll('.ctrl-btn').forEach(b =>
+      b.addEventListener('click', () => sendWS({ type: 'setPage', page: b.getAttribute('data-page') })));
+    $('startBtn').addEventListener('click', () => sendWS({ type: 'setScoring', value: 'active' }));
+    $('endBtn').addEventListener('click', () => sendWS({ type: 'setScoring', value: 'ended' }));
+    $('resetBtn').addEventListener('click', () => sendWS({ type: 'setScoring', value: 'idle' }));
+
+    function watchConn() {
+      const open = window._ws && window._ws.readyState === WebSocket.OPEN;
+      $('dot').classList.toggle('off', !open);
+      $('status').textContent = open ? '已连接' : '连接中…';
+    }
+    setInterval(watchConn, 800);
+
+    connectState((st) => { state = st; render(); });
+  </script>
+</body>
+</html>

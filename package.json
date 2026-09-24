@@ -1,0 +1,17 @@
+{
+  "name": "live-scoring-platform",
+  "version": "1.0.0",
+  "description": "现场实时打分平台：大屏显示 + 评委扫码打分 + 管理后台 + 手机控制切页",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "docx": "^9.7.2",
+    "express": "^4.19.2",
+    "playwright": "^1.63.0",
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.0"
+  }
+}

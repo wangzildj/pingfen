@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大屏显示</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="screen-body pg-background">
+  <div id="bg"></div>
+  <div class="stage">
+    <section id="page-background" class="page active"></section>
+
+    <section id="page-contestant" class="page contestant-page">
+      <div id="contestantHero" class="contestant-hero"></div>
+    </section>
+
+    <section id="page-scoring" class="page">
+      <div id="currentCard" class="current-card"></div>
+      <div id="judgesRow" class="judges-row"></div>
+    </section>
+
+    <section id="page-leaderboard" class="page">
+      <h1 class="screen-title">排行榜</h1>
+      <div id="leaderboard" class="board"></div>
+    </section>
+  </div>
+
+  <script src="/js/ws.js"></script>
+  <script>
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const avatarHtml = (c, cls) => c.avatar
+      ? `<img class="avatar ${cls || ''}" src="${esc(c.avatar)}" alt="">`
+      : `<div class="avatar ${cls || ''}">${esc((c.name || '?').slice(0, 1))}</div>`;
+
+    // 计算某选手：专业均分 / 大众均分 / 最终得分（按权重归一化）
+    // 规则：① 未启用大众评分时忽略大众分；② 可选去掉一个最高分和一个最低分；③ 仅统计已提交分数的评委
+    function finals(cid) {
+      const st = window._state || {};
+      const all = (st.scores && st.scores[cid]) || [];
+      const massEnabled = !!st.massEnabled;
+      // 计分的分数集合：未启用大众时排除大众评委
+      const list = massEnabled ? all : all.filter(s => s.judgeType !== 'mass');
+      const drop = !!st.dropExtremes;
+      const avg = (arr) => {
+        if (!arr.length) return 0;
+        let nums = arr.map(s => Number(s.score));
+        if (drop && nums.length >= 3) { nums = nums.slice().sort((a, b) => a - b); nums = nums.slice(1, -1); }
+        return nums.reduce((x, y) => x + y, 0) / nums.length;
+      };
+      const pro = list.filter(s => s.judgeType !== 'mass');
+      const mass = list.filter(s => s.judgeType === 'mass');
+      const proAvg = avg(pro), massAvg = avg(mass);
+      const pw = (typeof st.proWeight === 'number') ? st.proWeight : 0.7;
+      const parts = [];
+      if (pro.length) parts.push([proAvg, pw]);
+      if (mass.length) parts.push([massAvg, 1 - pw]);
+      const wsum = parts.reduce((a, p) => a + p[1], 0) || 1;
+      const final = parts.reduce((a, p) => a + p[0] * p[1], 0) / wsum;
+      return { proAvg, massAvg, final, list, proN: pro.length, massN: mass.length };
+    }
+
+    function currentContestant() {
+      const st = window._state || {};
+      return st.contestants.find(c => c.id === st.currentContestantId) || null;
+    }
+
+    function renderContestant() {
+      const st = window._state;
+      const cur = currentContestant();
+      const hero = document.getElementById('contestantHero');
+      if (!cur) {
+        hero.innerHTML = '<div class="muted hero-empty">请在手机控制台选择当前选手</div>';
+        return;
+      }
+      const img = cur.avatar
+        ? `<img class="hero-avatar" src="${esc(cur.avatar)}" alt="">`
+        : `<div class="hero-avatar ph">${esc((cur.name || '?').slice(0, 1))}</div>`;
+      hero.innerHTML = `
+        <div class="hero-img">${img}</div>
+        <div class="hero-name">${esc(cur.name)}</div>
+        ${cur.desc ? `<div class="hero-desc">${esc(cur.desc)}</div>` : ''}`;
+    }
+
+    function renderScoring() {
+      const st = window._state;
+      const cur = currentContestant();
+      const card = document.getElementById('currentCard');
+      if (!cur) {
+        card.innerHTML = '<div class="muted" style="margin:auto">等待选择选手（手机控制台选择选手）</div>';
+        document.getElementById('judgesRow').innerHTML = '';
+        return;
+      }
+      const f = finals(cur.id);
+      card.innerHTML = `
+        ${avatarHtml(cur)}
+        <div class="info"><div class="name">${esc(cur.name)}</div>${cur.desc ? `<div class="desc">${esc(cur.desc)}</div>` : ''}</div>
+        <div class="stat3">
+          <div class="st"><label>专业分数</label><b>${f.proN ? f.proAvg.toFixed(2) : '--'}</b></div>
+          ${st.massEnabled ? `<div class="st"><label>大众分数</label><b>${f.massN ? f.massAvg.toFixed(2) : '--'}</b></div>` : ''}
+          <div class="st final"><label>最终得分</label><b>${f.final.toFixed(2)}</b></div>
+        </div>`;
+      // 仅显示已提交分数且计入统计的评委（未提交的评委不显示、也不参与计算）
+      document.getElementById('judgesRow').innerHTML = f.list.length ? f.list.map(s => `
+        <div class="judge-mini">
+          ${s.judgeAvatar ? `<img src="${esc(s.judgeAvatar)}" alt="">` : `<div class="ph">${esc((s.judgeName || '?').slice(0, 1))}</div>`}
+          <div class="jn">${esc(s.judgeName)}${s.judgeType === 'mass' ? ' ·大众' : ''}</div>
+          <div class="js">${Number(s.score).toFixed(2)}</div>
+        </div>`).join('') : '<div class="muted">当前选手暂无评委提交分数</div>';
+    }
+
+    function renderLeaderboard() {
+      const st = window._state;
+      const ranked = st.contestants.map(c => ({ c, ...finals(c.id) }))
+        .sort((a, b) => b.final - a.final);
+      document.getElementById('leaderboard').innerHTML = ranked.map((r, i) => {
+        const parts = [`专业${r.proN ? r.proAvg.toFixed(1) : '--'}`];
+        if (st.massEnabled) parts.push(`大众${r.massN ? r.massAvg.toFixed(1) : '--'}`);
+        return `
+        <div class="rank-row">
+          <div class="rank-no">${i + 1}</div>
+          <div class="rank-info">${avatarHtml(r.c)}<div class="name">${esc(r.c.name)}</div></div>
+          <div class="rank-score">${r.final.toFixed(2)} <small>${parts.join(' · ')}</small></div>
+        </div>`;
+      }).join('') || '<div class="muted" style="text-align:center">暂无数据</div>';
+    }
+
+    function applyState(st) {
+      window._state = st;
+      document.getElementById('bg').style.backgroundImage = st.background ? `url("${st.background}")` : '';
+      document.body.className = 'screen-body pg-' + st.page;
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      const map = { background: 'page-background', contestant: 'page-contestant', scoring: 'page-scoring', leaderboard: 'page-leaderboard' };
+      document.getElementById(map[st.page] || 'page-background').classList.add('active');
+      renderContestant(); renderScoring(); renderLeaderboard();
+    }
+
+    connectState(applyState);
+  </script>
+</body>
+</html>

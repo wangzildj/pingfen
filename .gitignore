@@ -1,0 +1,13 @@
+# 依赖
+node_modules/
+
+# 运行时数据（SQLite 与上传文件，按需备份，不必入库）
+data/
+public/uploads/
+
+# 开发/验证产物
+shots/
+
+# 系统文件
+.DS_Store
+npm-debug.log*

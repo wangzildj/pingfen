@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理后台</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="app">管理后台</h1>
+
+    <div class="card-box">
+      <h3 style="margin-top:0">接入信息 / 二维码</h3>
+      <div class="qr-grid">
+        <div class="qr-box">
+          <img id="qrJudge" src="/api/qrcode/judge" alt="评委二维码">
+          <div class="cap">评委扫码打分</div>
+          <div class="url" id="urlJudge"></div>
+        </div>
+        <div class="qr-box">
+          <img id="qrControl" src="/api/qrcode/control" alt="控制二维码">
+          <div class="cap">手机控制台</div>
+          <div class="url" id="urlControl"></div>
+        </div>
+      </div>
+      <p class="muted" id="lanInfo"></p>
+    </div>
+
+    <div class="card-box">
+      <h3 style="margin-top:0">大屏背景图</h3>
+      <div class="row">
+        <input type="file" id="bgFile" accept="image/*">
+        <button class="btn primary" id="bgUpload">上传并设为背景</button>
+        <button class="btn" id="bgClear">清除背景</button>
+      </div>
+      <div id="bgPreview" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card-box">
+      <h3 style="margin-top:0">打分控制</h3>
+      <div class="row">
+        <button class="btn ok" id="startBtn">开始打分</button>
+        <button class="btn danger" id="endBtn">结束打分</button>
+        <button class="btn" id="resetBtn">重置(未开始)</button>
+        <button class="btn" id="clearBtn">重置所有评分数据</button>
+      </div>
+      <p class="muted" id="scoreState"></p>
+      <div class="row" style="margin-top:8px">
+        <div><label>最低分</label><input type="number" id="minScore" style="width:90px"></div>
+        <div><label>最高分</label><input type="number" id="maxScore" style="width:90px"></div>
+        <div><label>专业评委权重 %</label><input type="number" id="proW" min="0" max="100" style="width:110px"></div>
+        <button class="btn" id="rangeBtn">保存设置</button>
+      </div>
+      <div class="row" style="margin-top:10px;gap:24px;flex-wrap:wrap">
+        <label class="switch"><input type="checkbox" id="massChk"> 启用大众评委评分</label>
+        <label class="switch"><input type="checkbox" id="dropChk"> 去掉一个最高分和一个最低分</label>
+      </div>
+      <p class="muted" style="margin-top:6px">最终得分 = 专业均分×专业权重 + 大众均分×大众权重（某组无人打分时自动归一化）；未勾选「启用大众评委评分」时大众分不显示也不计入；勾选「去掉最高最低分」时每组≥3人方生效。</p>
+    </div>
+
+    <div class="card-box">
+      <h3 style="margin-top:0">大屏页面切换</h3>
+      <div class="row">
+        <button class="btn pg" data-page="background">纯背景</button>
+        <button class="btn pg" data-page="contestant">选手页</button>
+        <button class="btn pg" data-page="scoring">打分页</button>
+        <button class="btn pg" data-page="leaderboard">排行榜</button>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <h3 style="margin-top:0">选手管理（名字 + 图片）</h3>
+      <div class="row" style="margin-bottom:10px">
+        <input type="text" id="newName" placeholder="选手姓名" style="max-width:160px">
+        <input type="text" id="newDesc" placeholder="简介/类别（可选）" style="max-width:200px">
+        <input type="file" id="newAvatar" accept="image/*">
+        <button class="btn primary" id="addBtn">添加选手</button>
+      </div>
+      <div id="ctList"></div>
+    </div>
+
+    <div class="card-box">
+      <h3 style="margin-top:0">评委管理（名字 + 图片 + 密码）</h3>
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn" id="exportQrBtn">导出评委二维码 Word（每页9个）</button>
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <input type="text" id="jName" placeholder="评委姓名" style="max-width:160px">
+        <select id="jType" style="max-width:130px">
+          <option value="pro">专业评委</option>
+          <option value="mass">大众评委</option>
+        </select>
+        <input type="text" id="jPwd" placeholder="登录密码" style="max-width:140px">
+        <input type="file" id="jAvatar" accept="image/*">
+        <button class="btn primary" id="jAddBtn">添加评委</button>
+      </div>
+      <div id="jList"></div>
+    </div>
+  </div>
+
+  <!-- 评委个人二维码弹窗 -->
+  <div id="qrModal" class="modal">
+    <div class="modal-box">
+      <img id="qrModalImg" alt="评委二维码">
+      <div id="qrModalName" class="cap" style="margin-top:10px"></div>
+      <p class="muted">扫码后直接进入该评委本人账号，无需输密码</p>
+      <button class="btn" id="qrModalClose" style="width:100%;margin-top:8px">关闭</button>
+    </div>
+  </div>
+
+  <script src="/js/ws.js"></script>
+  <script>
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const $ = (id) => document.getElementById(id);
+    let state = null;
+
+    function readFile(file) {
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file);
+      });
+    }
+    async function upload(file, category) {
+      const data = await readFile(file);
+      const r = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, data, category })
+      });
+      return (await r.json()).url;
+    }
+    const placeholder = (ch, size) => `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}'%3E%3Crect width='${size}' height='${size}' fill='%234f8cff'/%3E%3Ctext x='50%25' y='58%25' fill='white' font-size='${size/2}' text-anchor='middle' dominant-baseline='middle'%3E${ch}%3C/text%3E%3C/svg%3E">`;
+
+    function render() {
+      if (!state) return;
+      $('minScore').value = state.scoreMin;
+      $('maxScore').value = state.scoreMax;
+      $('proW').value = Math.round((state.proWeight == null ? 0.7 : state.proWeight) * 100);
+      $('massChk').checked = !!state.massEnabled;
+      $('dropChk').checked = !!state.dropExtremes;
+      const map = { idle: '未开始', active: '进行中', ended: '已结束' };
+      $('scoreState').textContent = '当前状态：' + (map[state.scoring] || state.scoring);
+      document.querySelectorAll('.btn.pg').forEach(b => b.classList.toggle('active', b.getAttribute('data-page') === state.page));
+
+      $('bgPreview').innerHTML = state.background
+        ? `<img src="${esc(state.background)}" style="max-height:120px;border-radius:10px">`
+        : '<span class="muted">未设置背景</span>';
+
+      // 选手列表
+      $('ctList').innerHTML = state.contestants.map(c => `
+        <div class="ct-item">
+          ${c.avatar ? `<img src="${esc(c.avatar)}">` : placeholder(esc((c.name || '?').slice(0, 1)), 48)}
+          <div class="nm">${esc(c.name)}${c.desc ? `<span class="muted" style="font-weight:400;font-size:13px"> · ${esc(c.desc)}</span>` : ''}</div>
+          <button class="btn sm" data-ct-edit="${c.id}">编辑</button>
+          <button class="btn sm" data-ct-avatar="${c.id}">换头像</button>
+          <button class="btn sm danger" data-ct-del="${c.id}">删除</button>
+        </div>`).join('') || '<span class="muted">暂无选手</span>';
+
+      // 评委列表
+      $('jList').innerHTML = state.judges.map(j => `
+        <div class="ct-item">
+          ${j.avatar ? `<img src="${esc(j.avatar)}">` : placeholder(esc((j.name || '?').slice(0, 1)), 48)}
+          <div class="nm">${esc(j.name)}<span class="tag">${j.role === 'mass' ? '大众评委' : '专业评委'}</span><div class="muted" style="font-weight:400;font-size:12px">密码：${esc(j.password || '(空)')}</div></div>
+          <button class="btn sm" data-j-qr="${j.id}">二维码</button>
+          <button class="btn sm" data-j-edit="${j.id}">编辑</button>
+          <button class="btn sm" data-j-avatar="${j.id}">换头像</button>
+          <button class="btn sm" data-j-pwd="${j.id}">改密码</button>
+          <button class="btn sm danger" data-j-del="${j.id}">删除</button>
+        </div>`).join('') || '<span class="muted">暂无评委</span>';
+
+      bindListActions();
+    }
+
+    function bindListActions() {
+      const pickImage = async (cb) => {
+        const inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = 'image/*';
+        inp.onchange = async () => { if (inp.files[0]) cb(await upload(inp.files[0], 'avatar')); };
+        inp.click();
+      };
+      // 选手
+      document.querySelectorAll('[data-ct-del]').forEach(b => b.onclick = () => {
+        if (confirm('确认删除该选手？')) sendWS({ type: 'removeContestant', id: b.dataset.ctDel });
+      });
+      document.querySelectorAll('[data-ct-edit]').forEach(b => b.onclick = () => {
+        const name = prompt('选手姓名：'); if (name == null) return;
+        const desc = prompt('简介/类别（可留空）：'); if (desc == null) return;
+        sendWS({ type: 'updateContestant', id: b.dataset.ctEdit, name: name.trim(), desc: desc.trim() });
+      });
+      document.querySelectorAll('[data-ct-avatar]').forEach(b => b.onclick = () =>
+        pickImage(url => sendWS({ type: 'updateContestant', id: b.dataset.ctAvatar, avatar: url })));
+      // 评委
+      document.querySelectorAll('[data-j-del]').forEach(b => b.onclick = () => {
+        if (confirm('确认删除该评委？')) sendWS({ type: 'removeJudge', id: b.dataset.jDel });
+      });
+      document.querySelectorAll('[data-j-edit]').forEach(b => b.onclick = () => {
+        const name = prompt('评委姓名：'); if (name == null || !name.trim()) return;
+        const role = confirm('确定是【大众评委】吗？（取消=专业评委）') ? 'mass' : 'pro';
+        sendWS({ type: 'updateJudge', id: b.dataset.jEdit, name: name.trim(), role });
+      });
+      document.querySelectorAll('[data-j-pwd]').forEach(b => b.onclick = () => {
+        const p = prompt('设置新密码：'); if (p == null) return;
+        sendWS({ type: 'updateJudge', id: b.dataset.jPwd, password: p });
+      });
+      document.querySelectorAll('[data-j-avatar]').forEach(b => b.onclick = () =>
+        pickImage(url => sendWS({ type: 'updateJudge', id: b.dataset.jAvatar, avatar: url })));
+      document.querySelectorAll('[data-j-qr]').forEach(b => b.onclick = () => {
+        const j = state.judges.find(x => x.id === b.dataset.jQr);
+        if (!j) return;
+        $('qrModalImg').src = '/api/qrcode/judge?j=' + encodeURIComponent(j.id);
+        $('qrModalName').textContent = j.name + '（' + (j.role === 'mass' ? '大众评委' : '专业评委') + '） 密码：' + (j.password || '(无)');
+        $('qrModal').style.display = 'flex';
+      });
+    }
+
+    // ---------- 事件 ----------
+    $('bgUpload').onclick = async () => {
+      const f = $('bgFile').files[0];
+      if (!f) return alert('请先选择图片');
+      sendWS({ type: 'setBackground', url: await upload(f, 'background') });
+    };
+    $('bgClear').onclick = () => sendWS({ type: 'setBackground', url: '' });
+
+    $('startBtn').onclick = () => sendWS({ type: 'setScoring', value: 'active' });
+    $('endBtn').onclick = () => sendWS({ type: 'setScoring', value: 'ended' });
+    $('resetBtn').onclick = () => sendWS({ type: 'setScoring', value: 'idle' });
+    $('clearBtn').onclick = () => {
+      if (confirm('重置所有评分数据？将清空全部已提交分数并结束当前评分（选手与评委保留）。')) {
+        sendWS({ type: 'clearScores' });
+        sendWS({ type: 'setScoring', value: 'idle' });
+      }
+    };
+    $('exportQrBtn').onclick = () => {
+      if (!state.judges.length) return alert('暂无评委，无法导出');
+      window.open('/api/export/judge-qrcodes', '_blank');
+    };
+    $('rangeBtn').onclick = () => {
+      sendWS({ type: 'setScoreRange', min: Number($('minScore').value), max: Number($('maxScore').value) });
+      sendWS({ type: 'setWeights', proWeight: Number($('proW').value) / 100 });
+    };
+    $('massChk').onchange = () => sendWS({ type: 'setMassEnabled', value: $('massChk').checked });
+    $('dropChk').onchange = () => sendWS({ type: 'setDropExtremes', value: $('dropChk').checked });
+
+    document.querySelectorAll('.btn.pg').forEach(b => b.onclick = () => sendWS({ type: 'setPage', page: b.getAttribute('data-page') }));
+
+    $('addBtn').onclick = async () => {
+      const name = $('newName').value.trim();
+      if (!name) return alert('请输入选手姓名');
+      let avatar = '';
+      const f = $('newAvatar').files[0];
+      if (f) avatar = await upload(f, 'avatar');
+      sendWS({ type: 'addContestant', name, desc: $('newDesc').value.trim(), avatar });
+      $('newName').value = ''; $('newDesc').value = ''; $('newAvatar').value = '';
+    };
+
+    $('jAddBtn').onclick = async () => {
+      const name = $('jName').value.trim();
+      if (!name) return alert('请输入评委姓名');
+      let avatar = '';
+      const f = $('jAvatar').files[0];
+      if (f) avatar = await upload(f, 'avatar');
+      sendWS({ type: 'addJudge', name, password: $('jPwd').value.trim(), role: $('jType').value, avatar });
+      $('jName').value = ''; $('jPwd').value = ''; $('jAvatar').value = '';
+    };
+
+    $('qrModalClose').onclick = () => { $('qrModal').style.display = 'none'; };
+    $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) $('qrModal').style.display = 'none'; });
+
+    connectState(
+      (st) => { state = st; render(); },
+      (info) => {
+        $('urlJudge').textContent = info.baseUrl + '/judge';
+        $('urlControl').textContent = info.baseUrl + '/control';
+        $('lanInfo').textContent = '本机局域网地址：' + info.baseUrl + '（手机需连同一 Wi-Fi）';
+      }
+    );
+  </script>
+</body>
+</html>
