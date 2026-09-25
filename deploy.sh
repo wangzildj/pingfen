@@ -44,7 +44,8 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 echo "==> [3/6] 安装运行依赖（跳过 playwright 等开发依赖，不下载 Chromium）"
-npm install --omit=dev
+echo "    --build-from-source: 用本机工具链编译原生模块，避免下载绑定高版本 glibc 的预编译包（CentOS8/Alinux2 上会 GLIBC_2.29 not found）"
+npm install --omit=dev --build-from-source
 
 echo "==> [4/6] 计算公网地址（轻量应用服务器无 ECS 元数据，直接用外部服务获取真实公网 IP）"
 # 先试阿里云 ECS 元数据，再用外部服务兜底；两者都要求返回值必须是合法 IPv4，否则丢弃
