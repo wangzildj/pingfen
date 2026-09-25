@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
 # 阿里云轻量应用服务器一键部署脚本（Ubuntu/Debian/Alibaba Cloud Linux/CentOS 通用）
 # 用法： sudo bash deploy.sh
-# 作用：检测并安装 Node 20（含旧版自动升级） -> 安装依赖 -> 自动取公网 IP 填 BASE_URL -> pm2 守护启动
+# 作用：检测并安装 Node 22 LTS（含旧版自动升级） -> 安装依赖 -> 自动取公网 IP 填 BASE_URL -> pm2 守护启动
 set -e
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$APP_DIR"
 
-echo "==> [1/6] 检查 Node.js（需要 >= 18，过低/未装则自动装 Node 20）"
+echo "==> [1/6] 检查 Node.js（需要 >= 22，过低/未装则自动装 Node 22 LTS）"
 NODE_OK=0
 if command -v node >/dev/null 2>&1; then
   NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
   echo "    当前 Node: $(node -v)"
-  [ "$NODE_MAJOR" -ge 18 ] && NODE_OK=1
+  [ "$NODE_MAJOR" -ge 22 ] && NODE_OK=1
 fi
 if [ "$NODE_OK" -ne 1 ]; then
   if command -v apt-get >/dev/null 2>&1; then
     # Ubuntu / Debian（含阿里云 Ubuntu 镜像）
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
     apt-get update
     apt-get install -y nodejs build-essential
   elif command -v dnf >/dev/null 2>&1; then
     # Alibaba Cloud Linux / Fedora
-    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+    curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
     dnf install -y nodejs gcc-c++ make
   elif command -v yum >/dev/null 2>&1; then
     # CentOS 系
-    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+    curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
     yum install -y nodejs gcc-c++ make
   else
-    echo "!! 未识别的包管理器，请手动安装 Node 20 后重跑本脚本" >&2
+    echo "!! 未识别的包管理器，请手动安装 Node 22 后重跑本脚本" >&2
     exit 1
   fi
 fi
@@ -46,9 +46,15 @@ fi
 echo "==> [3/6] 安装运行依赖（跳过 playwright 等开发依赖，不下载 Chromium）"
 npm install --omit=dev
 
-echo "==> [4/6] 计算公网地址（优先用阿里云元数据，失败回退到 BASE_URL 环境变量）"
-PUBLIC_IP="$(curl -s --max-time 3 http://100.100.100.200/latest/meta-data/public-ipv4 || true)"
-if [ -z "$PUBLIC_IP" ]; then PUBLIC_IP="${BASE_URL:-localhost}"; fi
+echo "==> [4/6] 计算公网地址（轻量应用服务器无 ECS 元数据，直接用外部服务获取真实公网 IP）"
+# 先试阿里云 ECS 元数据，再用外部服务兜底；两者都要求返回值必须是合法 IPv4，否则丢弃
+PUBLIC_IP="$(curl -s --max-time 4 http://100.100.100.200/latest/meta-data/public-ipv4 2>/dev/null || true)"
+if ! echo "$PUBLIC_IP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+  PUBLIC_IP="$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+fi
+if ! echo "$PUBLIC_IP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+  PUBLIC_IP="${BASE_URL:-localhost}"
+fi
 PORT="${PORT:-3000}"
 export BASE_URL="http://${PUBLIC_IP}:${PORT}"
 echo "    BASE_URL=${BASE_URL}"
