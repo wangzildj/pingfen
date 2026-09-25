@@ -38,7 +38,11 @@ function getLanIp() {
   return candidates[0].address;
 }
 const LAN_IP = getLanIp();
-const baseUrl = `http://${LAN_IP}:${PORT}`;
+// 部署到公网（如 Render）时，用 BASE_URL 覆盖二维码/分享链接地址；
+// 留空则回退到局域网地址（本地 / 现场局域网使用）。
+const baseUrl = process.env.BASE_URL
+  ? String(process.env.BASE_URL).replace(/\/+$/, '')
+  : `http://${LAN_IP}:${PORT}`;
 
 const app = express();
 app.use(express.json({ limit: '30mb' }));

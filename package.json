@@ -10,8 +10,10 @@
     "better-sqlite3": "^13.0.3",
     "docx": "^9.7.2",
     "express": "^4.19.2",
-    "playwright": "^1.63.0",
     "qrcode": "^1.5.4",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }

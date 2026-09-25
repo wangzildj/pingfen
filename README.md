@@ -82,6 +82,37 @@ PORT=8080 LAN_IP=192.168.0.10 npm start
 
 ---
 
+## 🌐 部署到 Render（Node.js + SQLite，免费版）
+
+适合校内 / 小流量现场。免费实例长时间无访问会休眠，有人访问时自动唤醒（首次唤醒约 10–30 秒）。
+
+### 前置改动（本项目已包含）
+
+- 服务已绑定 `0.0.0.0`，可直接对外。
+- 二维码 / 分享链接地址通过环境变量 **`BASE_URL`** 指定，部署后扫码才能指向公网域名。
+- `playwright` 已移至 `devDependencies`，避免部署时下载 Chromium。
+
+### 步骤
+
+1. 把代码推到 GitHub（已含 `README.md` / `.gitignore`）。
+2. 打开 [render.com](https://render.com) → **New + → Web Service** → 关联你的 GitHub 仓库。
+3. 配置：
+   - **Build Command**：`npm install --omit=dev`（只装运行依赖，不装 playwright）
+   - **Start Command**：`node server.js`
+   - **Instance Type**：Free
+4. **Environment Variables** 添加：
+   - `PORT` = `10000`（Render 默认，服务已读 `process.env.PORT`）
+   - `BASE_URL` = `https://<你的服务名>.onrender.com`（**务必填**，否则评委二维码指向内网地址无法访问）
+5. 点 **Create Web Service**，等部署完成。打开分配的 `*.onrender.com` 域名即可使用。
+
+### 注意事项
+
+- **数据库持久化**：免费版文件系统为临时盘，每次重新部署会重置 `data/pingfen.db`。比赛当天部署、当天使用通常没问题；若需跨部署保留名单与分数，建议升级到付费实例（持久磁盘），或定期备份 `data/pingfen.db` 后恢复。
+- **休眠唤醒**：首访可能稍慢（冷启动），评委扫码前先打开一次大屏页预热。
+- **原生模块**：`better-sqlite3` 会在 Render 构建时编译，构建环境已具备工具链，正常通过。
+
+---
+
 ## 🗂️ 项目结构
 
 ```
