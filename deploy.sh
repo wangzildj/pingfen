@@ -1,17 +1,37 @@
 #!/usr/bin/env bash
-# 阿里云轻量应用服务器一键部署脚本（Ubuntu / Debian）
+# 阿里云轻量应用服务器一键部署脚本（Ubuntu/Debian/Alibaba Cloud Linux/CentOS 通用）
 # 用法： sudo bash deploy.sh
-# 作用：安装 Node 依赖 -> 自动取公网 IP 填 BASE_URL -> pm2 守护启动
+# 作用：检测并安装 Node 20（含旧版自动升级） -> 安装依赖 -> 自动取公网 IP 填 BASE_URL -> pm2 守护启动
 set -e
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$APP_DIR"
 
-echo "==> [1/5] 检查/安装 Node.js"
-if ! command -v node >/dev/null 2>&1; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get update
-  apt-get install -y nodejs build-essential
+echo "==> [1/5] 检查 Node.js（需要 >= 18，过低/未装则自动装 Node 20）"
+NODE_OK=0
+if command -v node >/dev/null 2>&1; then
+  NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+  echo "    当前 Node: $(node -v)"
+  [ "$NODE_MAJOR" -ge 18 ] && NODE_OK=1
+fi
+if [ "$NODE_OK" -ne 1 ]; then
+  if command -v apt-get >/dev/null 2>&1; then
+    # Ubuntu / Debian（含阿里云 Ubuntu 镜像）
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get update
+    apt-get install -y nodejs build-essential
+  elif command -v dnf >/dev/null 2>&1; then
+    # Alibaba Cloud Linux / Fedora
+    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+    dnf install -y nodejs gcc-c++ make
+  elif command -v yum >/dev/null 2>&1; then
+    # CentOS 系
+    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+    yum install -y nodejs gcc-c++ make
+  else
+    echo "!! 未识别的包管理器，请手动安装 Node 20 后重跑本脚本" >&2
+    exit 1
+  fi
 fi
 node -v
 
