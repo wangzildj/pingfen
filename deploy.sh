@@ -61,6 +61,46 @@ PORT="${PORT:-3000}"
 export BASE_URL="http://${PUBLIC_IP}:${PORT}"
 echo "    BASE_URL=${BASE_URL}"
 
+echo "==> [4.5/5] 配置 nginx 反代（80 -> 127.0.0.1:${PORT}，支持大文件上传与 WebSocket）"
+NGINX_OK=0
+if command -v nginx >/dev/null 2>&1 || apt-get install -y nginx 2>/dev/null || dnf install -y nginx 2>/dev/null || yum install -y nginx 2>/dev/null; then
+  cat > /etc/nginx/conf.d/pingfen.conf <<EOF
+server {
+    listen 80 default_server;
+    server_name _;
+    client_max_body_size 50m;
+    location / {
+        proxy_pass http://127.0.0.1:${PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 3600s;
+    }
+}
+EOF
+  # 摘掉系统自带 nginx.conf 里的 default_server，避免 80 端口冲突
+  sed -i 's/default_server//' /etc/nginx/nginx.conf 2>/dev/null || true
+  rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default
+  if nginx -t 2>/dev/null; then
+    systemctl enable nginx 2>/dev/null || true
+    systemctl restart nginx 2>/dev/null || nginx 2>/dev/null || true
+    # SELinux 可能拦截 nginx 访问后端端口（CentOS/Alibaba Cloud Linux）
+    setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+    NGINX_OK=1
+    # nginx 通了之后，对外地址走 80，不用带端口
+    export BASE_URL="http://${PUBLIC_IP}"
+    echo "    nginx 反代已就绪，BASE_URL=${BASE_URL}"
+  else
+    echo "    !! nginx 配置校验失败（nginx -t），跳过反代，仍用 ${BASE_URL} 直连"
+  fi
+else
+  echo "    !! nginx 安装失败，跳过反代，仍用 ${BASE_URL} 直连"
+fi
+
 echo "==> [5/5] 安装 pm2 进程守护（如未安装）并启动"
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
@@ -76,4 +116,4 @@ echo "   后台  : ${BASE_URL}/admin"
 echo "   评委  : ${BASE_URL}/judge"
 echo "   控制台: ${BASE_URL}/control"
 echo ""
-echo "   ⚠️ 记得在服务器控制台「防火墙」放行 TCP ${PORT}"
+echo "   ⚠️ 记得在服务器控制台「防火墙」放行 TCP 80 和 TCP ${PORT}"
