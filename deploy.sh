@@ -44,9 +44,12 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 echo "==> [3/6] 安装运行依赖（跳过 playwright 等开发依赖，不下载 Chromium）"
-echo "    --build-from-source: 用本机工具链编译原生模块，避免下载绑定高版本 glibc 的预编译包（CentOS8/Alinux2 上会 GLIBC_2.29 not found）"
-npm install --omit=dev --build-from-source
-# 关键：删掉预编译包，强制运行时加载本机编译产物（CentOS8/Alinux2 的 glibc 2.28 与 prebuilds 绑定的 2.29 不匹配，否则 ERR_DLOPEN_FAILED）
+npm install --omit=dev
+# 关键：better-sqlite3 必须本机源码编译。CentOS8/Alinux2 的 glibc 仅 2.28，
+# 而 npm 下载的 prebuilds 绑定 glibc 2.29，直接加载会 ERR_DLOPEN_FAILED。
+# npm 的 --build-from-source 会被 prebuild-install 短路而跳过编译，故这里直接 node-gyp 编译。
+rm -rf node_modules/better-sqlite3/prebuilds node_modules/better-sqlite3/build
+( cd node_modules/better-sqlite3 && npx --yes node-gyp rebuild --release )
 rm -rf node_modules/better-sqlite3/prebuilds
 
 echo "==> [4/6] 计算公网地址（轻量应用服务器无 ECS 元数据，直接用外部服务获取真实公网 IP）"
