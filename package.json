@@ -7,10 +7,10 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.3",
     "docx": "^9.7.2",
     "express": "^4.19.2",
     "qrcode": "^1.5.4",
+    "sql.js": "^1.14.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {

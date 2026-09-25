@@ -1,41 +1,36 @@
 #!/usr/bin/env bash
 # 阿里云轻量应用服务器一键部署脚本（Ubuntu/Debian/Alibaba Cloud Linux/CentOS 通用）
 # 用法： sudo bash deploy.sh
-# 作用：检测并安装 Node 22 LTS（含旧版自动升级） -> 安装依赖 -> 自动取公网 IP 填 BASE_URL -> pm2 守护启动
+# 作用：检查 Node(>=14 即可) -> 安装依赖（纯 JS，无需编译原生模块）-> 自动取公网 IP 填 BASE_URL -> pm2 守护启动
+# 注意：本项目用 sql.js（纯 WASM）替代 better-sqlite3，不再需要 gcc/python 源码编译，彻底规避 glibc 2.28 兼容问题。
 set -e
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$APP_DIR"
 
-echo "==> [1/6] 检查 Node.js（需要 >= 22，过低/未装则自动装 Node 22 LTS）"
+echo "==> [1/5] 检查 Node.js（sql.js 为纯 JS，>=14 即可，低于 14 才自动装）"
 NODE_OK=0
 if command -v node >/dev/null 2>&1; then
   NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
   echo "    当前 Node: $(node -v)"
-  [ "$NODE_MAJOR" -ge 22 ] && NODE_OK=1
+  [ "$NODE_MAJOR" -ge 14 ] && NODE_OK=1
 fi
 if [ "$NODE_OK" -ne 1 ]; then
   if command -v apt-get >/dev/null 2>&1; then
-    # Ubuntu / Debian（含阿里云 Ubuntu 镜像）
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get update
-    apt-get install -y nodejs build-essential
+    apt-get install -y nodejs
   elif command -v dnf >/dev/null 2>&1; then
-    # Alibaba Cloud Linux / Fedora
-    curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
-    dnf install -y nodejs gcc-c++ make
-  elif command -v yum >/dev/null 2>&1; then
-    # CentOS 系
-    curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
-    yum install -y nodejs gcc-c++ make
+    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+    dnf install -y nodejs
   else
-    echo "!! 未识别的包管理器，请手动安装 Node 22 后重跑本脚本" >&2
+    echo "!! 未识别的包管理器，请手动安装 Node.js 后重跑本脚本" >&2
     exit 1
   fi
 fi
 node -v
 
-echo "==> [2/6] 检查 git（未安装则安装）"
+echo "==> [2/5] 检查 git（未安装则安装）"
 if ! command -v git >/dev/null 2>&1; then
   if command -v apt-get >/dev/null 2>&1; then apt-get install -y git
   elif command -v dnf >/dev/null 2>&1; then dnf install -y git
@@ -43,16 +38,10 @@ if ! command -v git >/dev/null 2>&1; then
   fi
 fi
 
-echo "==> [3/6] 安装运行依赖（跳过 playwright 等开发依赖，不下载 Chromium）"
+echo "==> [3/5] 安装运行依赖（纯 JS 包，--omit=dev 跳过 playwright，无需编译原生模块）"
 npm install --omit=dev
-# 关键：better-sqlite3 必须本机源码编译。CentOS8/Alinux2 的 glibc 仅 2.28，
-# 而 npm 下载的 prebuilds 绑定 glibc 2.29，直接加载会 ERR_DLOPEN_FAILED。
-# npm 的 --build-from-source 会被 prebuild-install 短路而跳过编译，故这里直接 node-gyp 编译。
-rm -rf node_modules/better-sqlite3/prebuilds node_modules/better-sqlite3/build
-( cd node_modules/better-sqlite3 && npx --yes node-gyp rebuild --release )
-rm -rf node_modules/better-sqlite3/prebuilds
 
-echo "==> [4/6] 计算公网地址（轻量应用服务器无 ECS 元数据，直接用外部服务获取真实公网 IP）"
+echo "==> [4/5] 计算公网地址（轻量应用服务器无 ECS 元数据，直接用外部服务获取真实公网 IP）"
 # 先试阿里云 ECS 元数据，再用外部服务兜底；两者都要求返回值必须是合法 IPv4，否则丢弃
 PUBLIC_IP="$(curl -s --max-time 4 http://100.100.100.200/latest/meta-data/public-ipv4 2>/dev/null || true)"
 if ! echo "$PUBLIC_IP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
@@ -65,12 +54,10 @@ PORT="${PORT:-3000}"
 export BASE_URL="http://${PUBLIC_IP}:${PORT}"
 echo "    BASE_URL=${BASE_URL}"
 
-echo "==> [5/6] 安装 pm2 进程守护（如未安装）"
+echo "==> [5/5] 安装 pm2 进程守护（如未安装）并启动"
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
 fi
-
-echo "==> [6/6] 启动 / 重启服务"
 pm2 delete pingfen 2>/dev/null || true
 pm2 start server.js --name pingfen --update-env
 pm2 save

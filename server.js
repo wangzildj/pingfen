@@ -14,10 +14,9 @@ const UPLOAD_DIR = path.join(ROOT, 'public', 'uploads');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// 存储改为 SQLite（见 db.js）；启动时从旧 config.json 自动迁移一次
-const { loadState, saveState, migrateIfNeeded } = require('./db');
-migrateIfNeeded();
-let state = loadState();
+// 存储改为 SQLite（见 db.js，纯 WASM，零原生编译）。启动时 await db.init() 完成 WASM 加载后再读取状态。
+const db = require('./db');
+let state = null;
 
 function getLanIp() {
   if (process.env.LAN_IP) return process.env.LAN_IP;       // 手动指定，最优先
@@ -266,14 +265,21 @@ function handleMessage(msg, ws) {
     default:
       return;
   }
-  saveState(state);
+  db.saveState(state);
   broadcast();
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n现场打分平台已启动: ${baseUrl}`);
-  console.log(`  大屏显示 : ${baseUrl}/screen`);
-  console.log(`  管理后台 : ${baseUrl}/admin`);
-  console.log(`  评委扫码 : ${baseUrl}/judge  (二维码 ${baseUrl}/api/qrcode/judge)`);
-  console.log(`  手机控制 : ${baseUrl}/control (二维码 ${baseUrl}/api/qrcode/control)\n`);
+db.init().then(() => {
+  db.migrateIfNeeded();
+  state = db.loadState();
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n现场打分平台已启动: ${baseUrl}`);
+    console.log(`  大屏显示 : ${baseUrl}/screen`);
+    console.log(`  管理后台 : ${baseUrl}/admin`);
+    console.log(`  评委扫码 : ${baseUrl}/judge  (二维码 ${baseUrl}/api/qrcode/judge)`);
+    console.log(`  手机控制 : ${baseUrl}/control (二维码 ${baseUrl}/api/qrcode/control)\n`);
+  });
+}).catch((err) => {
+  console.error('数据库初始化失败，服务无法启动:', err);
+  process.exit(1);
 });
