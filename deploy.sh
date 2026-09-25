@@ -46,6 +46,8 @@ fi
 echo "==> [3/6] 安装运行依赖（跳过 playwright 等开发依赖，不下载 Chromium）"
 echo "    --build-from-source: 用本机工具链编译原生模块，避免下载绑定高版本 glibc 的预编译包（CentOS8/Alinux2 上会 GLIBC_2.29 not found）"
 npm install --omit=dev --build-from-source
+# 关键：删掉预编译包，强制运行时加载本机编译产物（CentOS8/Alinux2 的 glibc 2.28 与 prebuilds 绑定的 2.29 不匹配，否则 ERR_DLOPEN_FAILED）
+rm -rf node_modules/better-sqlite3/prebuilds
 
 echo "==> [4/6] 计算公网地址（轻量应用服务器无 ECS 元数据，直接用外部服务获取真实公网 IP）"
 # 先试阿里云 ECS 元数据，再用外部服务兜底；两者都要求返回值必须是合法 IPv4，否则丢弃
