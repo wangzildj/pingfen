@@ -113,6 +113,41 @@ PORT=8080 LAN_IP=192.168.0.10 npm start
 
 ---
 
+## 🟢 部署到 Replit（Node + SQLite，开箱即用）
+
+Replit 原生支持 Node.js 与持久化文件系统，SQLite 数据在休眠 / 唤醒后**不会丢失**（详见下方说明），适合教学演示与小项目。
+
+### 步骤
+
+1. 打开 [replit.com](https://replit.com) → **Create Repl → Import from GitHub**，选择你的仓库（或新建 Node Repl 后粘贴代码）。
+2. **Packages** 里确认依赖安装完成（`npm install` 会在 Replit 构建时自动执行；`better-sqlite3` 原生模块可正常编译）。
+3. **Run** 配置：Entry point 设为 `server.js`（或 Build/Run 命令 `node server.js`）。
+4. Replit 会自动注入 `REPLIT_DOMAINS` 环境变量，本项目据此生成公网地址，**评委二维码无需手动配置即可指向 `*.replit.app` 域名**（也可在 Secrets 里手动设 `BASE_URL` 覆盖）。
+5. 点 **Run**，右侧预览 / 分配的 `*.replit.app` 域名即可访问；手机扫码用该域名。
+
+### 关于 SQLite 数据是否会被清空
+
+**结论：Replit 的休眠（sleep）不会导致 SQLite 数据被清空。**
+
+原因与对比：
+
+| 场景 | Render（免费 Web Service） | Replit（免费 Repl） |
+| --- | --- | --- |
+| 进程休眠 / 唤醒 | 文件系统持久，但**重新部署**会重置磁盘 | 工作区文件系统**持久**，休眠不影响文件 |
+| SQLite 数据在休眠后 | 仍保留（休眠≠重置） | **仍保留** |
+| SQLite 数据在重新部署后 | **免费版会被清空**（临时盘） | 重新部署通常**保留**（持久盘） |
+| 数据真正丢失的情况 | 重新部署、删除服务 | 删除 Repl、长期不活跃被回收、手动 Reset |
+
+> Replit 的工作区文件保存在持久卷上，进程停止 / 休眠只是把容器挂起，磁盘上的 `data/pingfen.db` 一直都在，下次启动照常读取。本项目用 WAL 模式，即使休眠瞬间正好在写入，重新打开时 SQLite 也会自动回滚 / 检查点恢复，不会损坏。
+
+### 注意事项
+
+- 免费版同样有**休眠**：长时间无访问会暂停，下次访问自动唤醒（首访约几秒到十几秒）。
+- **备份习惯**：虽然持久，重大活动前仍建议下载备份 `data/pingfen.db`（在 Replit 文件面板右键下载），以防误删或回收。
+- 端口：Replit 会注入 `PORT`，本项目已读取；绑定 `0.0.0.0`，直接对外。
+
+---
+
 ## 🗂️ 项目结构
 
 ```

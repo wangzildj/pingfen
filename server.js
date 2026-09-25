@@ -38,11 +38,18 @@ function getLanIp() {
   return candidates[0].address;
 }
 const LAN_IP = getLanIp();
-// 部署到公网（如 Render）时，用 BASE_URL 覆盖二维码/分享链接地址；
-// 留空则回退到局域网地址（本地 / 现场局域网使用）。
+// 部署到公网时，用以下优先级确定二维码/分享链接地址：
+//   1) BASE_URL 环境变量（手动指定，最优先，Render / 任意平台通用）
+//   2) Replit 自动注入的 REPLIT_DOMAINS（开箱即用，无需手动填）
+//   3) 回退到局域网地址（本地 / 现场局域网使用）
+const replitDomain = process.env.REPLIT_DOMAINS
+  ? String(process.env.REPLIT_DOMAINS).split(',')[0].trim()
+  : '';
 const baseUrl = process.env.BASE_URL
   ? String(process.env.BASE_URL).replace(/\/+$/, '')
-  : `http://${LAN_IP}:${PORT}`;
+  : replitDomain
+    ? `https://${replitDomain}`
+    : `http://${LAN_IP}:${PORT}`;
 
 const app = express();
 app.use(express.json({ limit: '30mb' }));
