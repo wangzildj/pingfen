@@ -7,7 +7,7 @@ set -e
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$APP_DIR"
 
-echo "==> [1/5] 检查 Node.js（需要 >= 18，过低/未装则自动装 Node 20）"
+echo "==> [1/6] 检查 Node.js（需要 >= 18，过低/未装则自动装 Node 20）"
 NODE_OK=0
 if command -v node >/dev/null 2>&1; then
   NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
@@ -35,22 +35,30 @@ if [ "$NODE_OK" -ne 1 ]; then
 fi
 node -v
 
-echo "==> [2/5] 安装运行依赖（跳过 playwright 等开发依赖，不下载 Chromium）"
+echo "==> [2/6] 检查 git（未安装则安装）"
+if ! command -v git >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then apt-get install -y git
+  elif command -v dnf >/dev/null 2>&1; then dnf install -y git
+  elif command -v yum >/dev/null 2>&1; then yum install -y git
+  fi
+fi
+
+echo "==> [3/6] 安装运行依赖（跳过 playwright 等开发依赖，不下载 Chromium）"
 npm install --omit=dev
 
-echo "==> [3/5] 计算公网地址（优先用阿里云元数据，失败回退到 BASE_URL 环境变量）"
+echo "==> [4/6] 计算公网地址（优先用阿里云元数据，失败回退到 BASE_URL 环境变量）"
 PUBLIC_IP="$(curl -s --max-time 3 http://100.100.100.200/latest/meta-data/public-ipv4 || true)"
 if [ -z "$PUBLIC_IP" ]; then PUBLIC_IP="${BASE_URL:-localhost}"; fi
 PORT="${PORT:-3000}"
 export BASE_URL="http://${PUBLIC_IP}:${PORT}"
 echo "    BASE_URL=${BASE_URL}"
 
-echo "==> [4/5] 安装 pm2 进程守护（如未安装）"
+echo "==> [5/6] 安装 pm2 进程守护（如未安装）"
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
 fi
 
-echo "==> [5/5] 启动 / 重启服务"
+echo "==> [6/6] 启动 / 重启服务"
 pm2 delete pingfen 2>/dev/null || true
 pm2 start server.js --name pingfen --update-env
 pm2 save
