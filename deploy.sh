@@ -38,7 +38,14 @@ if ! command -v git >/dev/null 2>&1; then
   fi
 fi
 
+echo "==> [2.5/5] 同步最新代码（强制对齐远端 master，丢弃本地意外改动如 npm 生成的 package-lock.json）"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git fetch origin 2>/dev/null || true
+  git reset --hard origin/master 2>/dev/null || git reset --hard HEAD
+fi
+
 echo "==> [3/5] 安装运行依赖（纯 JS 包，--omit=dev 跳过 playwright，无需编译原生模块）"
+rm -rf node_modules
 npm install --omit=dev
 
 echo "==> [4/5] 计算公网地址（轻量应用服务器无 ECS 元数据，直接用外部服务获取真实公网 IP）"
