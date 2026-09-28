@@ -96,9 +96,7 @@
         ${avatarHtml(cur)}
         <div class="info"><div class="name">${esc(cur.name)}</div>${cur.desc ? `<div class="desc">${esc(cur.desc)}</div>` : ''}</div>
         <div class="stat3">
-          <div class="st"><label>专业分数</label><b>${f.proN ? f.proAvg.toFixed(2) : '--'}</b></div>
-          ${st.massEnabled ? `<div class="st"><label>大众分数</label><b>${f.massN ? f.massAvg.toFixed(2) : '--'}</b></div>` : ''}
-          <div class="st final"><label>最终得分</label><b>${f.final.toFixed(2)}</b></div>
+          <div class="st final"><label>得分</label><b>${f.final.toFixed(2)}</b></div>
         </div>`;
       // 仅显示已提交分数且计入统计的评委（未提交的评委不显示、也不参与计算）
       document.getElementById('judgesRow').innerHTML = f.list.length ? f.list.map(s => `
@@ -114,13 +112,11 @@
       const ranked = st.contestants.map(c => ({ c, ...finals(c.id) }))
         .sort((a, b) => b.final - a.final);
       document.getElementById('leaderboard').innerHTML = ranked.map((r, i) => {
-        const parts = [`专业${r.proN ? r.proAvg.toFixed(1) : '--'}`];
-        if (st.massEnabled) parts.push(`大众${r.massN ? r.massAvg.toFixed(1) : '--'}`);
         return `
         <div class="rank-row">
           <div class="rank-no">${i + 1}</div>
           <div class="rank-info">${avatarHtml(r.c)}<div class="name">${esc(r.c.name)}</div></div>
-          <div class="rank-score">${r.final.toFixed(2)} <small>${parts.join(' · ')}</small></div>
+          <div class="rank-score">${r.final.toFixed(2)}</div>
         </div>`;
       }).join('') || '<div class="muted" style="text-align:center">暂无数据</div>';
     }
