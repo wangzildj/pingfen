@@ -6,7 +6,6 @@ const fs = require('fs');
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'pingfen.db');
-const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -122,6 +121,7 @@ function loadState() {
       judgeAvatar: r.judgeAvatar, score: r.score, t: r.t
     });
   }
+  console.log(`[db] 载入数据: 选手 ${contestants.length} 名 / 评委 ${judges.length} 位 / 分数记录 ${scRows.length} 条`);
   return {
     background: m.background || '',
     page: m.page || 'background',
@@ -181,35 +181,14 @@ function saveState(state) {
   persist();
 }
 
-// ---------- 首次启动：库为空且存在旧 config.json 时，把数据迁过来；之后可删除 config.json ----------
+// ---------- 首次启动：库为空时仅写入默认配置，绝不从外部文件导入数据 ----------
+// （旧的 config.json 自动迁移逻辑已移除：它会在我方数据意外丢失时"复活"旧演示数据，
+//   表现为"重启后选手/评委被重置"。现在数据库是唯一数据源，重启绝不改动已有数据。）
 function migrateIfNeeded() {
   const cnt = get('SELECT COUNT(*) AS n FROM meta').n;
   if (cnt > 0) return false;
-  if (fs.existsSync(CONFIG_FILE)) {
-    try {
-      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-      saveState({
-        background: cfg.background || '',
-        page: cfg.page || 'background',
-        scoring: cfg.scoring || 'idle',
-        scoreMin: cfg.scoreMin != null ? cfg.scoreMin : 0,
-        scoreMax: cfg.scoreMax != null ? cfg.scoreMax : 100,
-        proWeight: cfg.proWeight != null ? cfg.proWeight : 0.7,
-        massEnabled: !!cfg.massEnabled,
-        dropExtremes: !!cfg.dropExtremes,
-        currentContestantId: cfg.currentContestantId || null,
-        contestants: cfg.contestants || [],
-        judges: cfg.judges || [],
-        scores: cfg.scores || {}
-      });
-      console.log('已从 config.json 迁移数据到 SQLite');
-      return true;
-    } catch (e) {
-      console.warn('迁移 config.json 失败:', e.message);
-    }
-  }
-  // 没有任何数据：写入默认 meta 以便后续识别为已初始化
   setMeta({ page: 'background', scoring: 'idle', scoreMin: 0, scoreMax: 100, proWeight: 0.7, massEnabled: 0, dropExtremes: 0, currentContestantId: '' });
+  console.log('[db] 全新数据库，已写入默认配置');
   return false;
 }
 
