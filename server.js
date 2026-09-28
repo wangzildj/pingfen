@@ -219,7 +219,14 @@ function handleMessage(msg, ws) {
       state.dropExtremes = !!msg.value;
       break;
     case 'clearScores':
-      state.scores = {};
+      // 带 contestantId 时只清空该选手（班级）的分数，供控制台「重置」使用；
+      // 不带则清空全部（后台管理页的清空所有分数）
+      if (msg.contestantId) {
+        delete state.scores[msg.contestantId];
+        if (msg.resetScoring) state.scoring = 'idle';
+      } else {
+        state.scores = {};
+      }
       break;
     case 'setScoreRange':
       if (typeof msg.min === 'number' && !isNaN(msg.min)) state.scoreMin = msg.min;

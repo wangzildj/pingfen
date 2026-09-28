@@ -1,0 +1,62 @@
+{
+  "background": "/uploads/background_1790242387551_gp7pfb.png",
+  "page": "background",
+  "scoring": "idle",
+  "scoreMin": 0,
+  "scoreMax": 100,
+  "proWeight": 0.7,
+  "massEnabled": false,
+  "dropExtremes": true,
+  "currentContestantId": "c1790250033262wsez",
+  "contestants": [
+    {
+      "id": "c1790250033262wsez",
+      "name": "林晓",
+      "desc": "钢琴独奏《月光》",
+      "avatar": ""
+    },
+    {
+      "id": "c1790250033263eaiu",
+      "name": "陈航",
+      "desc": "声乐《我的祖国》",
+      "avatar": ""
+    },
+    {
+      "id": "c1790250033264szqr",
+      "name": "苏婷",
+      "desc": "舞蹈《丝路》",
+      "avatar": ""
+    }
+  ],
+  "judges": [
+    {
+      "id": "g1790250033464h2cw",
+      "name": "张明",
+      "avatar": "",
+      "password": "1111",
+      "role": "pro"
+    },
+    {
+      "id": "g1790250033465vrak",
+      "name": "李红",
+      "avatar": "",
+      "password": "2222",
+      "role": "pro"
+    },
+    {
+      "id": "g1790250033465069g",
+      "name": "王强",
+      "avatar": "",
+      "password": "3333",
+      "role": "pro"
+    },
+    {
+      "id": "g1790250033466k8jb",
+      "name": "赵大众",
+      "avatar": "",
+      "password": "4444",
+      "role": "mass"
+    }
+  ],
+  "scores": {}
+}

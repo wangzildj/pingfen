@@ -106,7 +106,12 @@
       b.addEventListener('click', () => sendWS({ type: 'setPage', page: b.getAttribute('data-page') })));
     $('startBtn').addEventListener('click', () => sendWS({ type: 'setScoring', value: 'active' }));
     $('endBtn').addEventListener('click', () => sendWS({ type: 'setScoring', value: 'ended' }));
-    $('resetBtn').addEventListener('click', () => sendWS({ type: 'setScoring', value: 'idle' }));
+    $('resetBtn').addEventListener('click', () => {
+      const cid = state && state.currentContestantId;
+      if (!cid) return;
+      if (!confirm('确定重置「' + (currentContestant() ? currentContestant().name : '当前选手') + '」的打分分数？该操作不可撤销。')) return;
+      sendWS({ type: 'clearScores', contestantId: cid, resetScoring: true });
+    });
 
     function watchConn() {
       const open = window._ws && window._ws.readyState === WebSocket.OPEN;
